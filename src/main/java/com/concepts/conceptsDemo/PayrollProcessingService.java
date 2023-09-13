@@ -20,28 +20,37 @@ public class PayrollProcessingService {
     public Map<Long, Map<String, Double>> processPayrollItems() {
 
         List<CalculatingConcept> establishedConcepts = new ArrayList<>();
-
+        //Obtener los conceptos en forma de map donde La llave es el nombre del concepto
         Map<String, CalculatingConcept> concepts = conceptRepository.getCalculatingConcept();
-
+        //Separar loc conceptos numericos (Variables)
         Map<String, CalculatingConcept> numericConcepts = concepts.entrySet()
                 .stream().filter(concept -> concept.getValue().getValueType().equals("NUMERICO"))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
+        //Separar los conceptos de formulación
         Map<String, CalculatingConcept> formulationConcepts = concepts.entrySet()
                 .stream().filter(concept -> concept.getValue().getValueType().equals("FORMULACION"))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
+        //Iteración al map de conceptos calculados
         for (String key : formulationConcepts.keySet()) {
             CalculatingConcept concept = formulationConcepts.get(key);
             String value = concept.getValue();
-
+            //Obtener todos los tokens de la formula (variables y operadores)
             String[] tokens = value.split(" ");
-
+            /**
+             * Sacar todas las distintas variables excluyendo los operadores definidos
+             * en el array operators (Linea 16) y los tokens que sean ya numericos
+             */
             String[] variables = Arrays.stream(tokens)
                     .filter(elem -> Arrays.stream(operators).noneMatch(op -> op.equals(elem)) && !elem.matches("\\d+"))
                     .distinct()
                     .toArray(String[]::new);
-
+            /**
+             * 1. Iterar las variables de la formula
+             * 2. Verificar si el mapa de conceptos numericos contiene alguna llave igual a la variable iterada
+             * 3. Si se da el punto 2, itero el array de tokens, y si el token coincide con el
+             *    nombre de la variable, reemplazo el nombre del token en el array de tokens
+             *    por el numero de la variable (Ejemplo reemplazo porcentaje_ibc por 40)
+             */
             for (String var : variables){
                 if (numericConcepts.containsKey(var)){
                     for (int i = 0; i < tokens.length; i++){
@@ -49,12 +58,18 @@ public class PayrollProcessingService {
                     }
                 }
             }
+            /**
+             * 1. agregar al objeto el atributo del nombre del concepto
+             * 2. actualizar el valor por la formula, con las variables reemplazadas
+             * 3. Añado el concepto a una lista
+             */
             concept.setConceptName(key);
             concept.setValue(convertListToString(Arrays.stream(tokens).toList()));
             establishedConcepts.add(concept);
         }
-
+        //Organizo los conceptos por prioridad
         establishedConcepts.sort(Comparator.comparingInt(CalculatingConcept::getPriority));
+
 
         for (CalculatingConcept concept : establishedConcepts){
             System.out.println(concept.getConceptName());
@@ -73,6 +88,7 @@ public class PayrollProcessingService {
 
         Map<Long, Map<String, Double>> payroll = new HashMap<>();
 
+        //Por cada empleado calculo los conceptos
         for (Employee emp : Employees){
             Long key = emp.getId();
             Map<String, Double> itemsPayroll = new HashMap<>();
